@@ -14,6 +14,7 @@
 
 from csv import DictReader, DictWriter
 import os
+import datetime as dt
 
 file_name = "phone_book.csv"
 
@@ -43,13 +44,28 @@ def correct_number(prompt_to_user, min_len_name=3, max_len_name=11):
         return int(num)
 
 
+def file_extension(file_name):
+    return file_name.split(".")[-1] if file_name.count(".") > 0 else ""
+
+
+def file_without_extension(file_name):
+    return ".".join(file_name.split(".")[:-1]) if file_name.count(".") > 0 else file_name
+
+
 def get_info(mode_editing=False):
     data = []
     data.append(correct_name("Фамилия: ", max_len_name=45))
     data.append(correct_name("Имя: "))
     data.append(correct_name("Отчество: "))
     phone = correct_number("Телефон в формате (от 3 до 11 цифр): ", min_len_name=3, max_len_name=11)
-
+    existing_phones = search_records(file_name, str(phone), True)
+    if not mode_editing:
+        existing_phones = search_records(file_name, str(phone), True)        
+        while len(existing_phones) > 0:
+            print("Такой телефон зарегестрирован на", end=" ")
+            print_list_formatting(existing_phones)
+            phone = correct_number("Телефон в формате (от 3 до 11 цифр): ", min_len_name=3, max_len_name=11)
+            existing_phones = search_records(file_name, str(phone), True)
     data.append(phone)
     return data
 
@@ -62,6 +78,33 @@ def create_file(file_name):
     with open(file_name, "w", encoding="utf-8") as pb:
         f_writer = DictWriter(pb, field_names())
         f_writer.writeheader()
+
+
+def backup(file_name):
+    backup_file_name = (file_without_extension(file_name) + "_" +
+        str(dt.datetime.now())[:19].replace("-", "").replace(" ", "_").replace(":", "") +
+        ".csv")
+    create_file(backup_file_name)
+    data_to_write = [items[1] for items in read_file(file_name)]
+    write_file(backup_file_name, data_to_write)
+    print(f"Создан резерный файл: {backup_file_name}")
+
+
+def set_of_backup_to_delete(file_name):
+    extension_of_file = file_extension(file_name)
+    name_of_file = file_without_extension(file_name)
+    all_files = set(filter(lambda el: str(el).endswith(extension_of_file) and str(el).startswith(name_of_file), os.listdir(os.getcwd())))
+    excluded_files = set([file_name, max([os.path.getatime(os.getcwd() + os.sep + f) for f in all_files])])
+    return all_files - excluded_files
+
+
+def delete_old_backup(file_name):
+    path_to_delete = os.getcwd() + os.sep
+    set_of_file_to_delete = set_of_backup_to_delete(file_name)
+    for cur_file in set_of_file_to_delete:
+        file_to_delete = path_to_delete + cur_file
+        os.remove(file_to_delete)
+        print(f"Удален более не нужный резерный файл: {file_to_delete}")
 
 
 def write_file(file_name, lst_to_file):
@@ -93,13 +136,73 @@ def add_records(file_name, fio_phone_records):
     write_file(file_name, res)
 
 
+def search_records(file_name, to_find, accurate_search=False):
+    phone_book = read_file(file_name)
+    searched_records = []
+    if accurate_search:
+        for item in phone_book:
+            for v in item[1].values():
+                if str(to_find).lower() == str(v).lower():
+                    if item not in searched_records:
+                        searched_records.append(item)
+    else:
+        for item in phone_book:
+            for v in item[1].values():
+                if str(to_find).lower() in str(v).lower():
+                    if item not in searched_records:
+                        searched_records.append(item)
+    return searched_records
+
+
+def edit_record(file_name, to_find):
+    changed = False
+    phone_book = read_file(file_name)
+    for el in phone_book:
+        for v in el[1].values():
+            if to_find.lower() == str(v).lower():
+                print_list_formatting([el])
+                if input("Редактировать запись? (y - да)").lower() != "y":
+                    continue
+                changed = True
+                data = get_info(True)
+                el[1]["Фамилия"] = data[0]
+                el[1]["Имя"] = data[1]
+                el[1]["Отчество"] = data[2]
+                el[1]["Телефон"] = data[3]
+                print("Запись отредактирована: ", end=" ")
+                print_list_formatting([el])
+    if changed:
+        data_to_write = [items[1] for items in phone_book]
+        write_file(file_name, data_to_write)
+
+
+def delete_record(file_name, to_find):
+    changed = False
+    phone_book = read_file(file_name)
+    for el in phone_book:
+        for v in el[1].values():
+            if to_find.lower() == v.lower():
+                print_list_formatting([el])
+                if input("Удалить запись? (y - да)").lower() != "y":
+                    continue
+                changed = True
+                print("Запись удалена: ", end=" ")
+                print_list_formatting([phone_book.pop(phone_book.index(el))])
+    if changed:
+        data_to_write = [items[1] for items in phone_book]
+        write_file(file_name, data_to_write)
+
+
 def main():
 
     if not os.path.exists(file_name):
         create_file(file_name)
+    else:
+        delete_old_backup(file_name)
+        backup(file_name)
 
     while True:
-        command = input("Введите команду для работы с телефонным справочником (q-выход, p-печать, w-новая запись: ").lower()
+        command = input("Введите команду для работы с телефонным справочником (q-выход, p-печать, w-новая запись, e-редактировать запись, d-удалить запись, s-поиск значения): ").lower()
 
         if command == "q": # 0 Выйти из цикла
             break
@@ -107,6 +210,12 @@ def main():
             print_list_formatting(read_file(file_name))
         elif command == "w": # Добавить данные
             add_records(file_name, [get_info()])
+        elif command == "e":  # Редактировать данные
+            edit_record(file_name, input("Найти строки для редактирования (по полному совпадению (фамилия или имя или отчество или телефон)): "))
+        elif command == "d": # Удалить данные
+            delete_record(file_name, input("Найти строки для удаления (по полному совпадению (фамилия или имя или отчество или телефон)): "))
+        elif command == "s":  # Искать данные
+            print_list_formatting(search_records(file_name, input("Введите поисковую строку (по частичному совпадению): ")))
         else:
             print(f"Команды '{command}' нет! ")
 
