@@ -193,6 +193,40 @@ def delete_record(file_name, to_find):
         write_file(file_name, data_to_write)
 
 
+def string_to_int_ranges(in_str):
+    in_str = in_str.replace(" ", "")
+    if not is_chars_in_string_in_set(in_str, "0123456789-,"):
+        print("Некорректная строка диапазонов!")
+        return None
+
+    int_ranges_lst = in_str.split(",")
+    int_ranges = []
+    for el in int_ranges_lst:
+        if el.count("-") > 0:
+            el_lst = el.split("-")
+            int_ranges.extend(range(int(el_lst[0]), int(el_lst[1])+1))
+        else:
+            int_ranges.append(int(el))
+    return int_ranges
+
+
+def export_records(file_name, export_file_name):
+    phone_book = read_file(file_name)
+    export_file_name += ".csv"
+    count_row = len(phone_book) - 1
+
+    num_rows = input(f"Экспортировать строки (0-{count_row}), минус для диапазонов, запятая для строк, два числа через пробел как одно (2 3 -> 23) (например 1- 3,5 , 7 -9): ")
+    rows_to_export_lst = string_to_int_ranges(num_rows)
+    if rows_to_export_lst:
+        if not os.path.exists(export_file_name):
+            create_file(export_file_name)
+        exported_records = []
+        for i in rows_to_export_lst:
+            if i <= count_row:
+                exported_records.append(list(phone_book[i][1].values()))
+        add_records(export_file_name, exported_records)
+
+
 def main():
 
     if not os.path.exists(file_name):
@@ -202,7 +236,8 @@ def main():
         backup(file_name)
 
     while True:
-        command = input("Введите команду для работы с телефонным справочником (q-выход, p-печать, w-новая запись, e-редактировать запись, d-удалить запись, s-поиск значения): ").lower()
+
+        command = input("Введите команду для работы с телефонным справочником (q-выход, p-печать, w-новая запись, e-редактировать запись, d-удалить запись, s-поиск значения, x-экспорт строк по номерам): ").lower()
 
         if command == "q": # 0 Выйти из цикла
             break
@@ -216,6 +251,8 @@ def main():
             delete_record(file_name, input("Найти строки для удаления (по полному совпадению (фамилия или имя или отчество или телефон)): "))
         elif command == "s":  # Искать данные
             print_list_formatting(search_records(file_name, input("Введите поисковую строку (по частичному совпадению): ")))
+        elif command == "x":  # Экспортировать в другой файл по номеру строки
+            export_records(file_name, input("Имя файла для экспорта: "))
         else:
             print(f"Команды '{command}' нет! ")
 
